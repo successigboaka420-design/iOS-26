@@ -1,0 +1,71 @@
+name: Build Seko
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bash curl unzip
+
+      - name: Install Theos
+        run: |
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+
+      - name: Extract Seko project
+        run: |
+          mkdir -p build
+          unzip -o "IOS 26.5.zip" -d build
+
+      - name: Find project
+        run: |
+          PROJECT_MAKEFILE=$(find build -type f -name "Makefile" | head -n 1)
+
+          if [ -z "$PROJECT_MAKEFILE" ]; then
+            echo "ERROR: No Theos Makefile found inside the ZIP."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_MAKEFILE")
+
+          echo "Project found at:"
+          echo "$PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build Seko
+        run: |
+          cd "$PROJECT_DIR"
+
+          export THEOS="$HOME/theos"
+
+          make clean package FINALPACKAGE=1 messages=yes
+
+      - name: Find package
+        run: |
+          echo "Searching for Seko package..."
+
+          find "$PROJECT_DIR" \
+            -type f \
+            \( -name "*.deb" -o -name "*.ipa" \) \
+            -print
+
+      - name: Upload Seko package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Seko-build
+          path: |
+            **/*.deb
+            **/*.ipa
+          if-no-files-found: error
